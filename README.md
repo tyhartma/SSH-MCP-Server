@@ -35,108 +35,55 @@ Complete a pending keyboard-interactive SSH authentication.
 
 ## Installation & Setup
 
-### Quick Setup (Recommended)
+### 1. Clone and install
 
-1. **Add to Claude CLI with one command (cross-platform):**
+```bash
+git clone https://github.com/tyhartma/SSH-MCP-Server.git
+cd SSH-MCP-Server
+npm install
+npm install -g .
+```
 
-   ```bash
-   npx @zibdie/ssh-mcp-server@latest --install
-   ```
+### 2. Add to your MCP client configuration
 
-   This auto-detects your OS and registers the MCP server with the correct configuration for your platform.
+#### Claude CLI / Claude Desktop — macOS/Linux
 
-   **Or manually, if you prefer:**
+Edit `~/.config/claude/claude_desktop_config.json` (CLI) or `~/Library/Application Support/Claude/claude_desktop_config.json` (Desktop):
 
-   **macOS/Linux:**
-   ```bash
-   claude mcp add ssh-mcp-server -- npx '@zibdie/ssh-mcp-server@latest'
-   ```
+```json
+{
+  "mcpServers": {
+    "ssh-mcp-server": {
+      "command": "ssh-mcp-server"
+    }
+  }
+}
+```
 
-   **Windows:**
-   ```bash
-   claude mcp add ssh-mcp-server -- cmd /c npx @zibdie/ssh-mcp-server@latest
-   ```
+#### Claude CLI / Claude Desktop — Windows
 
-   > **Why the difference?** On Windows, `npx` is a batch file (`npx.cmd`). Claude Code launches MCP servers using Node.js `child_process.spawn()`, which cannot execute `.cmd` files directly. The `cmd /c` wrapper tells Windows to run it through the command interpreter.
+Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
-2. **Restart Claude CLI**
+```json
+{
+  "mcpServers": {
+    "ssh-mcp-server": {
+      "command": "cmd",
+      "args": ["/c", "ssh-mcp-server"]
+    }
+  }
+}
+```
 
-3. **Test the connection:**
-   ```
-   "Connect to my server at example.com with username myuser"
-   ```
+> **Why the difference on Windows?** Globally-installed npm commands are `.cmd` batch files. Claude Code launches MCP servers via `child_process.spawn()`, which cannot execute `.cmd` files directly — the `cmd /c` wrapper resolves this.
 
-### Alternative: Manual Installation
+### 3. Restart Claude CLI / Desktop
 
-#### For Claude CLI
+### 4. Test the connection
 
-1. **Install globally:**
-
-   ```bash
-   npm install -g @zibdie/ssh-mcp-server
-   ```
-
-2. **Add to configuration:**
-
-   **macOS/Linux**: Edit `~/.config/claude/claude_desktop_config.json`
-
-   ```json
-   {
-     "mcpServers": {
-       "ssh-mcp-server": {
-         "command": "ssh-mcp-server"
-       }
-     }
-   }
-   ```
-
-   **Windows**: Edit `%APPDATA%\Claude\claude_desktop_config.json`
-
-   ```json
-   {
-     "mcpServers": {
-       "ssh-mcp-server": {
-         "command": "cmd",
-         "args": ["/c", "ssh-mcp-server"]
-       }
-     }
-   }
-   ```
-
-#### For Claude Desktop
-
-1. **Install globally:**
-
-   ```bash
-   npm install -g @zibdie/ssh-mcp-server
-   ```
-
-2. **Add to configuration:**
-
-   **macOS**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-   ```json
-   {
-     "mcpServers": {
-       "ssh-mcp-server": {
-         "command": "ssh-mcp-server"
-       }
-     }
-   }
-   ```
-
-   **Windows**: Edit `%APPDATA%\Claude\claude_desktop_config.json`
-
-   ```json
-   {
-     "mcpServers": {
-       "ssh-mcp-server": {
-         "command": "cmd",
-         "args": ["/c", "ssh-mcp-server"]
-       }
-     }
-   }
-   ```
+```
+"Connect to my server at example.com with username myuser"
+```
 
 ## Demo
 
@@ -389,21 +336,12 @@ ssh_download_file with remotePath="/tmp/backup_20241203_143022.sql.gz", localPat
 
 1. **MCP server fails to start on Windows**
 
-   On Windows, `npx` and globally-installed npm commands are `.cmd` batch files. Claude Code uses `child_process.spawn()` to launch MCP servers, which cannot execute `.cmd` files directly. You must wrap the command with `cmd /c`:
+   Globally-installed npm commands are `.cmd` batch files. Claude Code uses `child_process.spawn()` which cannot execute them directly. Ensure your config uses the `cmd /c` wrapper:
 
-   ```bash
-   # Quick setup (Windows)
-   claude mcp add ssh-mcp-server -- cmd /c npx @zibdie/ssh-mcp-server@latest
-
-   # Or for global install (Windows)
-   claude mcp add ssh-mcp-server -- cmd /c ssh-mcp-server
-   ```
-
-   If editing the config JSON manually, use:
    ```json
    {
      "command": "cmd",
-     "args": ["/c", "npx", "@zibdie/ssh-mcp-server@latest"]
+     "args": ["/c", "ssh-mcp-server"]
    }
    ```
 
@@ -441,7 +379,7 @@ ssh_download_file with remotePath="/tmp/backup_20241203_143022.sql.gz", localPat
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/zibdie/SSH-MCP-Server.git
+   git clone https://github.com/tyhartma/SSH-MCP-Server.git
    cd SSH-MCP-Server
    ```
 
@@ -470,15 +408,15 @@ For detailed API documentation of all available tools and their parameters, see 
 
 MIT - see [LICENSE](LICENSE) file for details
 
-## Author
+## Original Author
 
 Nour Zibdie ([https://nour.zibdie.com](https://nour.zibdie.com))
 
 ## Repository
 
-https://github.com/zibdie/SSH-MCP-Server
+https://github.com/tyhartma/SSH-MCP-Server
 
 ## Support
 
-- [Issues](https://github.com/zibdie/SSH-MCP-Server/issues)
-- [Discussions](https://github.com/zibdie/SSH-MCP-Server/discussions)
+- [Issues](https://github.com/tyhartma/SSH-MCP-Server/issues)
+- [Discussions](https://github.com/tyhartma/SSH-MCP-Server/discussions)
