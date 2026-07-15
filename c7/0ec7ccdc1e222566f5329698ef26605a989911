@@ -1,0 +1,20 @@
+README.md
+  s_41efb49291490f::t_7d1ad144a1dd33 38,40-45,47,49,51,53-61,63,65,67-76,78,80,82,84-86
+  s_41efb49291490f::t_e44f73f60e161b 339,344,382,411,417,421-422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "c70ec7ccdc1e222566f5329698ef26605a989911",
+  "prompts": {},
+  "sessions": {
+    "s_41efb49291490f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ses_0993bd8d5ffe0Ep9t2tCegBTZX",
+        "model": "unknown"
+      },
+      "human_author": "tyhartma <tyhartma@cisco.com>"
+    }
+  }
+}
