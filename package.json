@@ -1,6 +1,6 @@
 {
   "name": "@zibdie/ssh-mcp-server",
-  "version": "1.0.10",
+  "version": "1.0.10-swims",
   "description": "Cross-platform MCP server for SSH connections with comprehensive remote server management tools",
   "main": "index.js",
   "type": "module",
@@ -32,11 +32,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zibdie/SSH-MCP-Server.git"
+    "url": "https://github.com/tyhartma/SSH-MCP-Server.git"
   },
-  "homepage": "https://github.com/zibdie/SSH-MCP-Server",
+  "homepage": "https://github.com/tyhartma/SSH-MCP-Server",
   "bugs": {
-    "url": "https://github.com/zibdie/SSH-MCP-Server/issues"
+    "url": "https://github.com/tyhartma/SSH-MCP-Server/issues"
   },
   "engines": {
     "node": ">=18.0.0"

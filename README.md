@@ -1,10 +1,26 @@
-# SSH MCP Server
+# SSH MCP Server (SWIMS Fork)
 
-[![npm version](https://badge.fury.io/js/@zibdie%2Fssh-mcp-server.svg)](https://badge.fury.io/js/@zibdie%2Fssh-mcp-server)
-[![CI/CD](https://github.com/zibdie/SSH-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/zibdie/SSH-MCP-Server/actions/workflows/ci.yml)
+> **Fork of [zibdie/SSH-MCP-Server](https://github.com/zibdie/SSH-MCP-Server)** with added support for Cisco SWIMS keyboard-interactive challenge-response authentication.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A cross-platform Model Context Protocol (MCP) server that provides SSH connectivity tools. This server enables AI assistants to securely connect to and execute commands on remote servers via SSH.
+
+## SWIMS Authentication (Fork Addition)
+
+This fork adds support for **Cisco SWIMS** keyboard-interactive challenge-response authentication:
+
+1. Call `ssh_connect` — if the server uses keyboard-interactive auth (e.g. SWIMS), the tool returns the challenge string instead of connecting immediately.
+2. Sign the challenge at https://swims.cisco.com/aberto/web/sign
+3. Call `ssh_complete_keyboard_auth` with the signed response to finish authentication.
+
+### `ssh_complete_keyboard_auth`
+
+Complete a pending keyboard-interactive SSH authentication.
+
+**Parameters:**
+- `connectionId` (optional): Connection ID with pending auth (default: "default")
+- `response` (required): Signed response from the external signing service (e.g. SWIMS Aberto)
 
 ## Features
 

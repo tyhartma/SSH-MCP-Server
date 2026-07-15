@@ -31,6 +31,7 @@ class SSHMCPServer {
     );
 
     this.connections = new Map();
+    this.pendingAuth = new Map();
     this.setupToolHandlers();
   }
 
@@ -252,6 +253,25 @@ class SSHMCPServer {
           },
         },
         {
+          name: 'ssh_complete_keyboard_auth',
+          description: 'Complete a pending keyboard-interactive SSH authentication (e.g. SWIMS challenge-response). Call ssh_connect first — it will return the challenge string. Sign it externally, then call this tool with the signed response to finish authentication.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              connectionId: {
+                type: 'string',
+                description: 'Connection ID with pending keyboard-interactive auth',
+                default: 'default',
+              },
+              response: {
+                type: 'string',
+                description: 'Signed response from the external signing service (e.g. SWIMS Aberto)',
+              },
+            },
+            required: ['response'],
+          },
+        },
+        {
           name: 'ssh_list_files',
           description: 'List files and directories on the remote server',
           inputSchema: {
@@ -301,6 +321,8 @@ class SSHMCPServer {
             return await this.handleSSHDownloadFile(args);
           case 'ssh_list_files':
             return await this.handleSSHListFiles(args);
+          case 'ssh_complete_keyboard_auth':
+            return await this.handleSSHCompleteKeyboardAuth(args);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -335,11 +357,15 @@ class SSHMCPServer {
 
     return new Promise((resolve, reject) => {
       const conn = new Client();
+      let keyboardInteractivePending = false;
       
       const config = {
         host,
         port,
         username,
+        readyTimeout: 300000,
+        keepaliveInterval: 10000,
+        keepaliveCountMax: 30,
       };
 
       // Handle IPv6 addresses
@@ -361,11 +387,27 @@ class SSHMCPServer {
         }
       } else if (password) {
         config.password = password;
+        config.tryKeyboard = true;
       } else {
-        return reject(new Error('Either password or privateKey must be provided'));
+        config.tryKeyboard = true;
       }
 
+      conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
+        const challenge = prompts.map(p => p.prompt).join('\n');
+        keyboardInteractivePending = true;
+        this.pendingAuth.set(connectionId, { challenge, finish, conn, resolve, reject });
+        resolve({
+          content: [
+            {
+              type: 'text',
+              text: `SWIMS_CHALLENGE\nConnection: ${connectionId}\nChallenge:\n${challenge}\n\nSign this challenge at https://swims.cisco.com/aberto/web/sign then call ssh_complete_keyboard_auth with the signed response.`,
+            },
+          ],
+        });
+      });
+
       conn.on('ready', () => {
+        this.pendingAuth.delete(connectionId);
         this.connections.set(connectionId, conn);
         resolve({
           content: [
@@ -378,7 +420,10 @@ class SSHMCPServer {
       });
 
       conn.on('error', (error) => {
-        reject(new Error(`SSH connection failed: ${error.message}`));
+        if (!keyboardInteractivePending) {
+          this.pendingAuth.delete(connectionId);
+          reject(new Error(`SSH connection failed: ${error.message}`));
+        }
       });
 
       conn.on('close', () => {
@@ -845,6 +890,38 @@ class SSHMCPServer {
     } catch (error) {
       throw error;
     }
+  }
+
+  async handleSSHCompleteKeyboardAuth(args) {
+    const { connectionId = 'default', response } = args;
+
+    const pending = this.pendingAuth.get(connectionId);
+    if (!pending) {
+      throw new Error(`No pending keyboard-interactive auth for connection '${connectionId}'. Call ssh_connect first.`);
+    }
+
+    const { finish, conn, resolve, reject } = pending;
+    this.pendingAuth.delete(connectionId);
+
+    return new Promise((res, rej) => {
+      conn.once('ready', () => {
+        this.connections.set(connectionId, conn);
+        res({
+          content: [
+            {
+              type: 'text',
+              text: `Successfully authenticated and connected (connection: ${connectionId})`,
+            },
+          ],
+        });
+      });
+
+      conn.once('error', (error) => {
+        rej(new Error(`Authentication failed: ${error.message}`));
+      });
+
+      finish([response]);
+    });
   }
 
   async run() {
