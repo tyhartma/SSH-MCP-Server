@@ -40,7 +40,7 @@ class SSHMCPServer {
       tools: [
         {
           name: 'ssh_connect',
-          description: 'Connect to an SSH server using password or SSH key authentication. Supports IPv4 and IPv6.',
+          description: 'Connect to an SSH server using password or SSH key authentication. Supports IPv4 and IPv6.\n\nBEFORE calling this tool, read ~/.ssh/config and find the Host block matching the target host. If that block contains "PreferredAuthentications keyboard-interactive", the host uses SWIMS authentication — do NOT pass a password or privateKey, just pass host, username, and connectionId. The tool will return a challenge string. When it does, follow this process exactly:\n1. Extract the challenge string from the tool response.\n2. Present the challenge string to the user and ask them to sign it at https://swims.cisco.com/aberto/web/sign.\n3. Wait for the user to paste back the signed response.\n4. Call ssh_complete_keyboard_auth with the signed response to finish authentication.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -400,7 +400,7 @@ class SSHMCPServer {
           content: [
             {
               type: 'text',
-              text: `SWIMS_CHALLENGE\nConnection: ${connectionId}\nChallenge:\n${challenge}\n\nSign this challenge at https://swims.cisco.com/aberto/web/sign then call ssh_complete_keyboard_auth with the signed response.`,
+              text: `SWIMS_CHALLENGE\nConnection: ${connectionId}\n\nPresent the following challenge string to the user and ask them to sign it at https://swims.cisco.com/aberto/web/sign. Once they provide the signed response, call ssh_complete_keyboard_auth with it.\n\nChallenge:\n${challenge}`,
             },
           ],
         });
