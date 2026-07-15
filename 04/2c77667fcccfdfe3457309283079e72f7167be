@@ -1,0 +1,23 @@
+package.json
+  s_41efb49291490f::t_d67b521ccfd744 35,37,39
+  s_41efb49291490f::t_c54e1497ed147c 3
+README.md
+  s_41efb49291490f::t_ab2767696df3ad 1-3,9-23
+  s_41efb49291490f::t_cbc37068ef45c8 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "042c77667fcccfdfe3457309283079e72f7167be",
+  "prompts": {},
+  "sessions": {
+    "s_41efb49291490f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ses_0993bd8d5ffe0Ep9t2tCegBTZX",
+        "model": "unknown"
+      },
+      "human_author": "tyhartma <tyhartma@cisco.com>"
+    }
+  }
+}
