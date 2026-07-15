@@ -8,13 +8,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { Client } from 'ssh2';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { resolve as pathResolve, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8'));
+const packageJson = JSON.parse(readFileSync(pathResolve(__dirname, 'package.json'), 'utf8'));
 
 class SSHMCPServer {
   constructor() {
@@ -376,7 +376,7 @@ class SSHMCPServer {
       // Authentication setup
       if (privateKey) {
         try {
-          const keyPath = resolve(privateKey);
+          const keyPath = pathResolve(privateKey.replace(/^~/, process.env.HOME || ''));
           const keyData = readFileSync(keyPath);
           config.privateKey = keyData;
           if (passphrase) {
@@ -706,7 +706,7 @@ class SSHMCPServer {
       throw new Error(`No active connection found for ID: ${connectionId}`);
     }
 
-    const absoluteLocalPath = resolve(localPath);
+    const absoluteLocalPath = pathResolve(localPath);
 
     return new Promise((resolve, reject) => {
       // Check if local file exists
@@ -767,7 +767,7 @@ class SSHMCPServer {
       throw new Error(`No active connection found for ID: ${connectionId}`);
     }
 
-    const absoluteLocalPath = resolve(localPath);
+    const absoluteLocalPath = pathResolve(localPath);
 
     return new Promise((resolve, reject) => {
       conn.sftp((err, sftp) => {
