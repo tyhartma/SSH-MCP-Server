@@ -357,13 +357,60 @@ class SSHMCPServer {
 
     return new Promise((resolve, reject) => {
       const conn = new Client();
-      let keyboardInteractivePending = false;
-      
+
+      // --- keyboard-interactive (SWIMS) plumbing --------------------------
+      // The signed-response round-trip happens in a *separate* tool call
+      // (ssh_complete_keyboard_auth), so the auth outcome must survive the gap
+      // between surfacing the challenge and receiving the response. A single
+      // `auth` record carries the ssh2 `finish` callback plus a `deliver()`
+      // funnel that routes every terminal event (ready/error/close/timeout) OR
+      // a follow-up challenge to whoever is waiting — and queues it if the
+      // completion call hasn't been made yet. This is what stops the
+      // completion call from hanging forever when the handshake errors or times
+      // out during the (potentially slow) external signing.
+      let challengeSurfaced = false;
+      const auth = { conn, finish: null, challenge: null, waiter: null, queuedOutcome: null, settled: false };
+
+      const buildChallengeResult = (challenge) => ({
+        content: [
+          {
+            type: 'text',
+            text: `SWIMS_CHALLENGE\nConnection: ${connectionId}\n\nPresent the following challenge string to the user and ask them to sign it and return the response. Once they provide the signed response, call ssh_complete_keyboard_auth with it.\n\nChallenge:\n${challenge}`,
+          },
+        ],
+      });
+
+      const deliver = (outcome) => {
+        const terminal = outcome.type === 'ready' || outcome.type === 'error';
+        // Once a terminal outcome has actually settled a waiter, ignore any
+        // trailing events (e.g. a normal 'close' after a successful 'ready').
+        if (auth.settled) return;
+        if (auth.waiter) {
+          const { res, rej, timer } = auth.waiter;
+          auth.waiter = null;
+          if (timer) clearTimeout(timer);
+          if (terminal) auth.settled = true;
+          if (outcome.type === 'ready') res(outcome.result);
+          else if (outcome.type === 'error') rej(outcome.error);
+          else res(buildChallengeResult(outcome.challenge)); // follow-up round; not terminal
+        } else {
+          // Nobody waiting yet — stash it for the next completion call (latest
+          // wins). A terminal outcome stashed here is deliberately NOT marked
+          // settled, so the completion call can still receive it rather than
+          // waiting out the 60s guard.
+          auth.queuedOutcome = outcome;
+        }
+      };
+      auth.deliver = deliver;
+
       const config = {
         host,
         port,
         username,
-        readyTimeout: 300000,
+        // Handshake budget. This clock also covers the wait for the external
+        // SWIMS signing, so keep it generous; the per-response 60s guard in
+        // handleSSHCompleteKeyboardAuth bounds the post-response wait.
+        readyTimeout: 600000,
         keepaliveInterval: 10000,
         keepaliveCountMax: 30,
       };
@@ -393,41 +440,65 @@ class SSHMCPServer {
       }
 
       conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
-        const challenge = prompts.map(p => p.prompt).join('\n');
-        keyboardInteractivePending = true;
-        this.pendingAuth.set(connectionId, { challenge, finish, conn, resolve, reject });
-        resolve({
-          content: [
-            {
-              type: 'text',
-              text: `SWIMS_CHALLENGE\nConnection: ${connectionId}\n\nPresent the following challenge string to the user and ask them to sign it and return the response. Once they provide the signed response, call ssh_complete_keyboard_auth with it.\n\nChallenge:\n${challenge}`,
-            },
-          ],
-        });
+        // The challenge can arrive in any of the SSH_MSG_USERAUTH_INFO_REQUEST
+        // fields. SWIMS delivers it in `name`/`instructions`, while `prompts`
+        // is often just a bare "Response:" label — so combine them all instead
+        // of reading only the prompt text (which yields a blank challenge).
+        const promptText = (prompts || []).map(p => (p && p.prompt) || '').join('\n');
+        const challenge = [name, instructions, promptText]
+          .map(s => (s || '').trim())
+          .filter(Boolean)
+          .join('\n');
+        auth.finish = finish;
+        auth.challenge = challenge;
+        if (!challengeSurfaced) {
+          // First round: resolve the ssh_connect call itself with the challenge.
+          challengeSurfaced = true;
+          this.pendingAuth.set(connectionId, auth);
+          resolve(buildChallengeResult(challenge));
+        } else {
+          // A later round: either genuine multi-round SWIMS, or the server
+          // re-issuing the prompt after a rejected/expired response. Hand the
+          // fresh challenge back to the pending ssh_complete_keyboard_auth call
+          // instead of dropping it (which previously hung the completion).
+          deliver({ type: 'challenge', challenge });
+        }
       });
 
       conn.on('ready', () => {
         this.pendingAuth.delete(connectionId);
         this.connections.set(connectionId, conn);
-        resolve({
+        const result = {
           content: [
             {
               type: 'text',
               text: `Successfully connected to ${host}:${port} as ${username} (connection: ${connectionId})`,
             },
           ],
-        });
+        };
+        // Before a challenge is surfaced this resolves ssh_connect directly;
+        // afterwards it must settle the pending completion call instead.
+        if (challengeSurfaced) deliver({ type: 'ready', result });
+        else resolve(result);
       });
 
       conn.on('error', (error) => {
-        if (!keyboardInteractivePending) {
-          this.pendingAuth.delete(connectionId);
-          reject(new Error(`SSH connection failed: ${error.message}`));
-        }
+        this.pendingAuth.delete(connectionId);
+        const err = new Error(`SSH connection failed: ${error.message}`);
+        // Previously this was swallowed while a keyboard-interactive auth was
+        // pending, so a handshake timeout/disconnect during signing left the
+        // completion call hanging forever. Always surface it now.
+        if (challengeSurfaced) deliver({ type: 'error', error: err });
+        else reject(err);
       });
 
       conn.on('close', () => {
         this.connections.delete(connectionId);
+        // If the socket closes mid-auth without a 'ready' or 'error', unblock
+        // any waiter rather than leaving the completion call hanging.
+        if (challengeSurfaced && !auth.settled) {
+          deliver({ type: 'error', error: new Error(`SSH connection closed before authentication completed (connection: ${connectionId})`) });
+        }
       });
 
       conn.connect(config);
@@ -895,31 +966,42 @@ class SSHMCPServer {
   async handleSSHCompleteKeyboardAuth(args) {
     const { connectionId = 'default', response } = args;
 
-    const pending = this.pendingAuth.get(connectionId);
-    if (!pending) {
+    const auth = this.pendingAuth.get(connectionId);
+    if (!auth) {
       throw new Error(`No pending keyboard-interactive auth for connection '${connectionId}'. Call ssh_connect first.`);
     }
+    if (typeof auth.finish !== 'function') {
+      throw new Error(`No unanswered challenge for connection '${connectionId}'. Call ssh_connect first.`);
+    }
 
-    const { finish, conn, resolve, reject } = pending;
-    this.pendingAuth.delete(connectionId);
+    // Consume this round's finish() so the same challenge can't be answered
+    // twice; a follow-up round installs a fresh finish() via the
+    // keyboard-interactive handler in handleSSHConnect.
+    const finish = auth.finish;
+    auth.finish = null;
 
     return new Promise((res, rej) => {
-      conn.once('ready', () => {
-        this.connections.set(connectionId, conn);
-        res({
-          content: [
-            {
-              type: 'text',
-              text: `Successfully authenticated and connected (connection: ${connectionId})`,
-            },
-          ],
-        });
-      });
+      const timer = setTimeout(() => {
+        if (!auth.waiter) return;
+        auth.waiter = null;
+        this.pendingAuth.delete(connectionId);
+        try { auth.conn.end(); } catch { /* best effort */ }
+        rej(new Error(`Timed out after 60s waiting for the SSH server to accept the keyboard-interactive response (connection: ${connectionId}). The challenge may have expired, or the signed response was not accepted.`));
+      }, 60000);
 
-      conn.once('error', (error) => {
-        rej(new Error(`Authentication failed: ${error.message}`));
-      });
+      auth.waiter = { res, rej, timer };
 
+      // A terminal outcome (or a follow-up challenge) may have arrived while
+      // nobody was waiting — deliver it now instead of calling finish() again.
+      if (auth.queuedOutcome) {
+        const queued = auth.queuedOutcome;
+        auth.queuedOutcome = null;
+        auth.deliver(queued);
+        return;
+      }
+
+      // Submit the signed response. The outcome is routed back to this promise
+      // by the ready/error/close/challenge handlers wired up in handleSSHConnect.
       finish([response]);
     });
   }
