@@ -393,7 +393,15 @@ class SSHMCPServer {
       }
 
       conn.on('keyboard-interactive', (name, instructions, instructionsLang, prompts, finish) => {
-        const challenge = prompts.map(p => p.prompt).join('\n');
+        // The challenge can arrive in any of the SSH_MSG_USERAUTH_INFO_REQUEST
+        // fields. SWIMS delivers it in `name`/`instructions`, while `prompts`
+        // is often just a bare "Response:" label — so combine them all instead
+        // of reading only the prompt text (which yields a blank challenge).
+        const promptText = (prompts || []).map(p => (p && p.prompt) || '').join('\n');
+        const challenge = [name, instructions, promptText]
+          .map(s => (s || '').trim())
+          .filter(Boolean)
+          .join('\n');
         keyboardInteractivePending = true;
         this.pendingAuth.set(connectionId, { challenge, finish, conn, resolve, reject });
         resolve({
